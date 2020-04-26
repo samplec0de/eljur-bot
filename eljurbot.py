@@ -248,12 +248,12 @@ def view_message(update: Update, context: CallbackContext):
         context.user_data['reply'] = None
         message_id = query.data.split('_')[-1]
         if query.data.startswith('message_view_new_'):
-            keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_{message_id}'),
+            keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_inbox_{message_id}'),
                          InlineKeyboardButton("Закрыть", callback_data='close')]]
             message_folder = 'inbox'
         else:
             message_folder = query.data.split('_')[-2]
-            keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_{message_id}'),
+            keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_{message_folder}_{message_id}'),
                          InlineKeyboardButton("Назад", callback_data=f'page_{message_folder}_it')]]
         message = ejuser.get_message(msg_id=message_id, force_folder=message_folder)
         result = parse_message(message=message)
@@ -343,15 +343,14 @@ def message_recipients(update: Update, context: CallbackContext):
 def message_reply(update: Update, context: CallbackContext):
     query = update.callback_query
     message_id = query.data.split('_')[-1]
+    folder = query.data.split('_')[-2]
     ejuser = cte.get_cte(chat_id=query.message.chat.id)
     message = ejuser.get_message(message_id)
     result = parse_message(message=message)
     result += '\n\nНапишите ответное сообщение:'
     query.edit_message_text(result, parse_mode=ParseMode.HTML)
     context.user_data['reply'] = message_id
-    print(context.user_data['reply'])
-    keyboard = [[InlineKeyboardButton('Отмена', callback_data=f'message_{context.user_data.get("messages_folder")}'
-                                                              f'_{message_id}')]]
+    keyboard = [[InlineKeyboardButton('Отмена', callback_data=f'message_{folder}_{message_id}')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     query.edit_message_reply_markup(reply_markup)
     query.answer()
@@ -398,7 +397,7 @@ if __name__ == '__main__':
         {'callback': homework_handler, 'pattern': '^homework_[0-9.]*$'},
         {'callback': messages_page_handler, 'pattern': '^(page_inbox_|page_sent_)(prev|next|it|[0-9]*)*$'},
         {'callback': view_message, 'pattern': '^(message_inbox_|message_sent_|message_view_new_)[0-9]*$'},
-        {'callback': message_reply, 'pattern': '^reply_[0-9]*$'},
+        {'callback': message_reply, 'pattern': '^(reply_inbox_|reply_sent_)[0-9]*$'},
         {'callback': message_recipients, 'pattern': '^(recipients_inbox_|recipients_sent_)[0-9]*_(prev|next|it)$'},
         {'callback': close_message, 'pattern': '^close$'}
     ]

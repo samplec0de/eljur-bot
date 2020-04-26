@@ -15,10 +15,9 @@ def present_messages(chat_id: int, msgs: Dict[str, Any], folder: str) -> str:
     :return: отображение сообщений для страницы
     """
     result = ''
-    ind = 1
     today = datetime.now()
     yesterday = today - timedelta(days=1)
-    for msg in msgs['messages']:
+    for ind, msg in enumerate(msgs['messages']):
         date = load_date(msg['date'])
         when = f"{date.strftime('%-d %B %H:%M')}"
         if days_equal(date, today):
@@ -43,10 +42,10 @@ def present_messages(chat_id: int, msgs: Dict[str, Any], folder: str) -> str:
                              and chain[pos_in_chain - 1]['folder'] == MessageFolder.SENT \
                              and folder == MessageFolder.INBOX else ''
         if msg['unread']:
-            result += f"{ind}. <b>{answered}{unread}{files} {user_preview} ({when})</b>\n" \
+            result += f"{ind + 1}. <b>{answered}{unread}{files} {user_preview} ({when})</b>\n" \
                       f"<pre>    {msg['subject']}</pre>\n"
         else:
-            result += f"{ind}. {answered}{files}<b><i>{user_preview}</i></b> ({when})\n" \
+            result += f"{ind + 1}. {answered}{files}<b><i>{user_preview}</i></b> ({when})\n" \
                       f"<i>    {msg['subject']}</i>\n"
         ind += 1
     return '\n' + result + '\n'
