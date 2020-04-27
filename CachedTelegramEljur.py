@@ -370,7 +370,8 @@ class CachedTelegramEljur(Eljur):
         self.msg_cache[folder] = new_messages + self.msg_cache[folder]
         not_cached = []
         for msg in new_messages:
-            not_cached.append({'chat_id': self.chat_id, 'folder': msg['folder'], 'id': msg['id']})
+            if not msg['unread']:
+                not_cached.append({'chat_id': self.chat_id, 'folder': msg['folder'], 'id': msg['id']})
         if new_messages:
             try:
                 cache_queue.insert_many(deepcopy(not_cached))
