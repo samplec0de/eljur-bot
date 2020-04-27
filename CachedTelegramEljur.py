@@ -28,6 +28,7 @@ logger = logging.getLogger('CachedTelegramEljur')
 
 
 class CachedTelegramEljur(Eljur):
+    download_in_progress: bool  # индикатор того, что сообщения уже кэшируются
     msgs_load_limit: int  # Лимит по количеству сообщений для первичной загрузки в память, автоматически расширяется
     token: Optional[str]  # eljur токен пользователя
     chat_id: int  # идентификатор чата (Telegram, etc)
@@ -307,6 +308,9 @@ class CachedTelegramEljur(Eljur):
             logger.info(f'Сообщение с id {msg_id} в {folder} НЕ ДОБАВЛЕНО в кэш для {self.chat_id} (не найдено в бд)')
 
     def cache_full_messages(self):
+        """
+        Кэширует полные сообщения пользователя (такие поля как текст и др.)
+        """
         logger.info(f'Работа по кэшированию сообщений для {self.chat_id} начата, осталось {len(self.not_cached)}')
         with ThreadPoolExecutor(max_workers=MESSAGES_CACHE_THREADS) as pool:
             for msg_id in pool.map(lambda p: self.get_message(msg_id=p['id'],
@@ -316,6 +320,9 @@ class CachedTelegramEljur(Eljur):
                 logger.info(f"Сообщение для {self.chat_id} с id {msg_id} добавлено в базу")
 
     def message_ids(self, folder: str) -> List[str]:
+        """
+        Возвращает список id сообщений из базы или подгружает их, если в базе пусто
+        """
         if self.cached_message_ids[folder]:
             return self.cached_message_ids[folder]
         messages_key = f'messages_{folder}'
@@ -336,6 +343,9 @@ class CachedTelegramEljur(Eljur):
                                  {'$set': {messages_key: self.cached_message_ids[folder]}})
 
     def message_exist(self, folder: str, msg_id: str):
+        """
+        Проверяет существует ли в базе сообщение с id msg_id в папке folder
+        """
         return msg_id in self.message_ids(folder=folder)
 
     def download_messages_preview(self, folder: str, limit: int = 1000) -> List[dict]:
@@ -372,7 +382,10 @@ class CachedTelegramEljur(Eljur):
         self.download_in_progress = False
         return [msg for msg in new_messages if msg['folder'] == MessageFolder.INBOX]
 
-    def messages_chain(self, msg_id: str, folder: str):
+    def messages_chain(self, msg_id: str, folder: str) -> List[Dict[str, Any]]:
+        """
+        Позволяет получить цепочку сообщений, содержащую msg_id
+        """
         src_msg = self.get_message(msg_id=msg_id, force_folder=folder)
         subject = src_msg.get('subject')
         reply = subject.startswith('Re: ')
@@ -406,6 +419,9 @@ class CachedTelegramEljur(Eljur):
 
     @property
     def homework(self) -> Optional[Dict[str, dict]]:
+        """
+        Позволяет получить домашнее задание из базы или получить с eljur
+        """
         homework_data = homework.find_one({'chat_id': self.chat_id})
         last_update = -1
         mode_update = False
