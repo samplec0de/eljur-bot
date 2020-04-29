@@ -6,7 +6,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime
 from json import loads
-from threading import Lock
+from threading import Lock, Thread
 from typing import Optional, List, Union, Dict, Any
 
 import pymongo
@@ -62,7 +62,7 @@ class CachedTelegramEljur(Eljur):
             for folder_type in FOLDER_TYPES:
                 self.msg_cache[folder_type] = self.messages(folder=folder_type)
                 if not self.msg_cache[folder_type]:
-                    self.download_messages_preview(folder=folder_type)
+                    self.download_messages_preview(check_new_only=False, folder=folder_type)
         self._lock = Lock()
 
     def user_data(self, field: str) -> Any:
@@ -220,7 +220,7 @@ class CachedTelegramEljur(Eljur):
 
     def mark_as_read(self, folder: str, msg_id: str):
         """
-        Отмечает сообщение как прочитанное
+        Отмечает сообщение как прочитанное в кэше и базе
         """
         for msg in self.msg_cache[folder]:
             if msg['id'] == msg_id:
@@ -230,7 +230,7 @@ class CachedTelegramEljur(Eljur):
 
     def get_message(self, msg_id: str,
                     only_cache: bool = False,
-                    force_folder: Optional[str] = None) -> Union[Optional[dict], str]:
+                    force_folder: Optional[str] = None, no_eljur_request: bool = False) -> Union[Optional[dict], str]:
         """
         Пытается найти полную версию сообщения в базе
         """
@@ -241,10 +241,14 @@ class CachedTelegramEljur(Eljur):
         if document and 'text' in document:
             if only_cache:
                 return msg_id
+            if not no_eljur_request and document['unread']:
+                Thread(target=super().get_message, args=[msg_id], daemon=True).start()
             return document
         if only_cache and document['unread']:
             logger.debug(f'{msg_id} не будет сохраняться сейчас, потому что оно ещё не прочтено')
             return msg_id
+        if no_eljur_request:
+            return document
         msg_data = super().get_message(msg_id=msg_id)
         if not msg_data:
             logging.error(f'Не удалось получить от элжура сообщение с id {msg_id}')
@@ -255,7 +259,7 @@ class CachedTelegramEljur(Eljur):
             self._cache_full_message(msg_id=msg_id, msg_data=msg_data, folder=MessageFolder.INBOX)
             self._cache_full_message(msg_id=msg_id, msg_data=msg_data, folder=MessageFolder.SENT)
         if not only_cache:
-            return self.get_message(msg_id=msg_id)
+            return self.get_message(msg_id=msg_id, force_folder=force_folder)
         return msg_id
 
     def get_messages(self, folder: str = MessageFolder.INBOX, page: int = 1, limit: int = 6, unreadonly: bool = False) \
@@ -348,7 +352,7 @@ class CachedTelegramEljur(Eljur):
         """
         return msg_id in self.message_ids(folder=folder)
 
-    def download_messages_preview(self, folder: str, limit: int = 1000) -> List[dict]:
+    def download_messages_preview(self, check_new_only: bool, folder: str, limit: int = 1000) -> List[dict]:
         """
         Обновляет кэш сообщений и возвращает список новых входящих сообщений
         """
@@ -369,12 +373,14 @@ class CachedTelegramEljur(Eljur):
                                      if not self.message_exist(folder=folder, msg_id=msg['id'])])
         self.msg_cache[folder] = new_messages + self.msg_cache[folder]
         not_cached = []
-        for msg in new_messages:
-            if not msg['unread']:
-                not_cached.append({'chat_id': self.chat_id, 'folder': msg['folder'], 'id': msg['id']})
+        if not check_new_only:
+            for msg in new_messages:
+                if not msg['unread']:
+                    not_cached.append({'chat_id': self.chat_id, 'folder': msg['folder'], 'id': msg['id']})
         if new_messages:
             try:
-                cache_queue.insert_many(deepcopy(not_cached))
+                if not_cached:
+                    cache_queue.insert_many(deepcopy(not_cached))
                 self.not_cached.extend(not_cached)
                 messages.insert_many(new_messages)
                 self.add_message_ids(folder=folder, ids=[msg['id'] for msg in new_messages])
@@ -387,7 +393,7 @@ class CachedTelegramEljur(Eljur):
         """
         Позволяет получить цепочку сообщений, содержащую msg_id
         """
-        src_msg = self.get_message(msg_id=msg_id, force_folder=folder)
+        src_msg = self.get_message(msg_id=msg_id, force_folder=folder, no_eljur_request=True)
         subject = src_msg.get('subject')
         reply = subject.startswith('Re: ')
         if reply:
@@ -417,6 +423,20 @@ class CachedTelegramEljur(Eljur):
             )]
         chain.sort(key=lambda item: load_date(item['date']).timestamp())
         return chain[::-1]
+
+    def update_read_state(self, folder: str) -> None:
+        """
+        Обновляет статус прочтения сообщений
+        """
+        result = super().get_messages(folder=folder, limit=1000, unreadonly=True)
+        messages.update_many({'chat_id': self.chat_id, 'folder': folder, 'unread': True}, {'$set': {'unread': False}})
+        if 'messages' in result:
+            ids = [msg['id'] for msg in result['messages']]
+            if ids:
+                messages.update_many({'chat_id': self.chat_id, 'folder': folder, 'id': {'$in': ids}},
+                                     {'$set': {'unread': True}})
+        self.msg_cache[folder].clear()
+        self.messages(folder=folder)
 
     @property
     def homework(self) -> Optional[Dict[str, dict]]:

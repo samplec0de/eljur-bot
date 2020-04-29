@@ -28,24 +28,27 @@ def present_messages(chat_id: int, msgs: Dict[str, Any], folder: str) -> str:
             user_preview = format_user(msg['user_from'])
         else:
             if 'user_to' not in msg:
-                msg['user_to'] = [msg['user_from']]
+                if 'user_from' in msg:
+                    msg['user_to'] = [msg['user_from']]
+                else:
+                    msg['user_to'] = msg['users_to']
             user_preview = format_user(msg['user_to'][0])
         files = ' 📎 ' if msg['with_files'] else ''
-        unread = ' 🆕 ' if msg['unread'] else ''
         chain = cte.get_cte(chat_id=chat_id).messages_chain(msg_id=msg['id'], folder=folder)
-        pos_in_chain = 0
+        chain_pos = 0
         for chain_msg in chain:
             if chain_msg['id'] == msg['id']:
                 break
-            pos_in_chain += 1
-        answered = ' ✔️ ' if pos_in_chain != 0 \
-                             and chain[pos_in_chain - 1]['folder'] == MessageFolder.SENT \
-                             and folder == MessageFolder.INBOX else ''
+            chain_pos += 1
+        if chain_pos != 0 and chain[chain_pos - 1]['folder'] == MessageFolder.SENT and folder == MessageFolder.INBOX:
+            answered = ' ↪️️ '
+        else:
+            answered = ''
         if msg['unread']:
-            result += f"{ind + 1}. <b>{answered}{unread}{files} {user_preview} ({when})</b>\n" \
+            result += f"{ind + 1}. <b>{answered}{files} {user_preview} ({when})</b>\n" \
                       f"<pre>    {msg['subject']}</pre>\n"
         else:
-            result += f"{ind + 1}. {answered}{files}<b><i>{user_preview}</i></b> ({when})\n" \
+            result += f"{ind + 1}. {answered}{files}<i>{user_preview}</i> ({when})\n" \
                       f"<i>    {msg['subject']}</i>\n"
         ind += 1
     return '\n' + result + '\n'

@@ -128,7 +128,7 @@ def check_for_new_messages(context):
     user_id = context.job.context
     logger.info(f'Проверка новых сообщений для {user_id}')
     ejuser = cte.get_cte(chat_id=user_id)
-    new_messages = ejuser.download_messages_preview(limit=10, folder=MessageFolder.INBOX)
+    new_messages = ejuser.download_messages_preview(check_new_only=True, limit=100, folder=MessageFolder.INBOX)
     logger.info(f'{len(new_messages)} новых сообщений для {user_id}')
     if not new_messages:
         return
@@ -163,7 +163,7 @@ def messages_common_part(msgs: Dict[str, Union[str, list, int]],
     if context.user_data['messages_page'] == 1:
         keyboard = [[InlineKeyboardButton(f'{op_folder_name.lower().capitalize()}',
                                           callback_data=f'page_{op_folder}_1'),
-                     InlineKeyboardButton(f'🔄', callback_data=f'page_{folder}_1'),
+                     InlineKeyboardButton(f'🔄', callback_data=f'update_{folder}'),
                      InlineKeyboardButton('➡', callback_data=f'page_{folder}_next')]
                     ]
     else:
@@ -365,7 +365,7 @@ def just_message(update: Update, context: CallbackContext):
         if ejuser.reply_message(replyto=message_id, text=reply_text):
             message = ejuser.get_message(message_id)
             result = parse_message(message=message)
-            result += f'\n\n<b>Ваш ответ на это сообщение был был отправлен:</b> <pre>{reply_text}</pre>'
+            result += f'\n\n<b>Ваш ответ на это сообщение был был отправлен:</b> \n<pre>{reply_text}</pre>'
             update.message.reply_text(result, parse_mode=ParseMode.HTML)
         else:
             update.message.reply_text('Произошла ошибка, попробуйте позднее')
@@ -388,6 +388,22 @@ def cache_full_messages_task():
         time.sleep(MESSAGES_CACHE_DELAY)
 
 
+def update_messages(update: Update, context: CallbackContext):
+    try:
+        query = update.callback_query
+        folder = query.data.split('_')[-1]
+        ejuser = cte.get_cte(chat_id=query.message.chat.id)
+        ejuser.update_read_state(folder=folder)
+        context.user_data['messages_page'] = 1
+        msgs = ejuser.get_messages(page=context.user_data['messages_page'], folder=folder)
+        messages_s, reply_markup = messages_common_part(msgs=msgs, folder=folder, context=context, ejuser=ejuser)
+        query.edit_message_text(messages_s, parse_mode=ParseMode.HTML)
+        query.edit_message_reply_markup(reply_markup=reply_markup)
+        query.answer()
+    except:
+        print(traceback.format_exc())
+
+
 if __name__ == '__main__':
     persistence = PicklePersistence(filename=str(data_dir / 'persistence.pickle'))
     updater = Updater(os.environ["token"], use_context=True, persistence=persistence)
@@ -398,6 +414,7 @@ if __name__ == '__main__':
         {'callback': messages_page_handler, 'pattern': '^(page_inbox_|page_sent_)(prev|next|it|[0-9]*)*$'},
         {'callback': view_message, 'pattern': '^(message_inbox_|message_sent_|message_view_new_)[0-9]*$'},
         {'callback': message_reply, 'pattern': '^(reply_inbox_|reply_sent_)[0-9]*$'},
+        {'callback': update_messages, 'pattern': '^(update_inbox|update_sent)$'},
         {'callback': message_recipients, 'pattern': '^(recipients_inbox_|recipients_sent_)[0-9]*_(prev|next|it)$'},
         {'callback': close_message, 'pattern': '^close$'}
     ]
