@@ -6,7 +6,7 @@ import time
 import traceback
 from pathlib import Path
 from threading import Thread
-from typing import Dict, Union
+from typing import Dict, Any
 
 import pymongo
 from pymorphy2 import MorphAnalyzer
@@ -145,7 +145,7 @@ def check_for_new_messages(context):
         context.bot.send_message(chat_id=user_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
 
-def messages_common_part(msgs: Dict[str, Union[str, list, int]],
+def messages_common_part(msgs: Dict[str, Any],
                          folder: str,
                          context: CallbackContext,
                          ejuser: CachedTelegramEljur):
@@ -188,32 +188,29 @@ def messages(update: Update, context: CallbackContext):
 
 
 def messages_page_handler(update: Update, context: CallbackContext):
-    try:
-        query = update.callback_query
-        action = query.data.split('_')[-1]
-        if 'messages_page' in context.user_data:
-            if action == 'next':
-                context.user_data['messages_page'] += 1
-            elif action == 'prev':
-                context.user_data['messages_page'] -= 1
-            elif action.isdigit():
-                context.user_data['messages_page'] = int(action)
-        else:
-            context.user_data['messages_page'] = 1
-        folder = query.data.split('_')[1]
-        context.user_data['messages_page'] = max(1, context.user_data['messages_page'])
-        ejuser = cte.get_cte(chat_id=query.message.chat.id)
-        msgs = ejuser.get_messages(page=context.user_data['messages_page'], folder=folder)
-        total = math.ceil(int(msgs['total']) / 6)
-        if context.user_data['messages_page'] > total:
-            context.user_data['messages_page'] = 1
-            msgs = ejuser.get_messages(page=context.user_data['messages_page'])
-        messages_s, reply_markup = messages_common_part(msgs=msgs, folder=folder, context=context, ejuser=ejuser)
-        query.edit_message_text(messages_s, parse_mode=ParseMode.HTML)
-        query.edit_message_reply_markup(reply_markup=reply_markup)
-        query.answer()
-    except:
-        print(traceback.format_exc())
+    query = update.callback_query
+    action = query.data.split('_')[-1]
+    if 'messages_page' in context.user_data:
+        if action == 'next':
+            context.user_data['messages_page'] += 1
+        elif action == 'prev':
+            context.user_data['messages_page'] -= 1
+        elif action.isdigit():
+            context.user_data['messages_page'] = int(action)
+    else:
+        context.user_data['messages_page'] = 1
+    folder = query.data.split('_')[1]
+    context.user_data['messages_page'] = max(1, context.user_data['messages_page'])
+    ejuser = cte.get_cte(chat_id=query.message.chat.id)
+    msgs = ejuser.get_messages(page=context.user_data['messages_page'], folder=folder)
+    total = math.ceil(int(msgs['total']) / 6)
+    if context.user_data['messages_page'] > total:
+        context.user_data['messages_page'] = 1
+        msgs = ejuser.get_messages(page=context.user_data['messages_page'])
+    messages_s, reply_markup = messages_common_part(msgs=msgs, folder=folder, context=context, ejuser=ejuser)
+    query.edit_message_text(messages_s, parse_mode=ParseMode.HTML)
+    query.edit_message_reply_markup(reply_markup=reply_markup)
+    query.answer()
 
 
 def parse_message(message: dict):
@@ -241,55 +238,52 @@ def parse_message(message: dict):
 
 
 def view_message(update: Update, context: CallbackContext):
-    try:
-        query = update.callback_query
-        ejuser = cte.get_cte(chat_id=query.message.chat.id)
-        context.user_data['recipients_offset'] = 0
-        context.user_data['reply'] = None
-        message_id = query.data.split('_')[-1]
-        if query.data.startswith('message_view_new_'):
-            keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_inbox_{message_id}'),
-                         InlineKeyboardButton("Закрыть", callback_data='close')]]
-            message_folder = 'inbox'
+    query = update.callback_query
+    ejuser = cte.get_cte(chat_id=query.message.chat.id)
+    context.user_data['recipients_offset'] = 0
+    context.user_data['reply'] = None
+    message_id = query.data.split('_')[-1]
+    if query.data.startswith('message_view_new_'):
+        keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_inbox_{message_id}'),
+                     InlineKeyboardButton("Закрыть", callback_data='close')]]
+        message_folder = 'inbox'
+    else:
+        message_folder = query.data.split('_')[-2]
+        keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_{message_folder}_{message_id}'),
+                     InlineKeyboardButton("Назад", callback_data=f'page_{message_folder}_it')]]
+    message = ejuser.get_message(msg_id=message_id, force_folder=message_folder)
+    result = parse_message(message=message)
+    ejuser.mark_as_read(msg_id=message_id, folder=message_folder)
+    yet_more = len(message['user_to']) - RECIPIENTS_PREVIEW_COUNT
+    if yet_more > 0:
+        keyboard.append([InlineKeyboardButton("Полный список получателей",
+                                              callback_data=f"recipients_{message_folder}_{message_id}_it")])
+    chain = ejuser.messages_chain(msg_id=message_id, folder=message_folder)
+    pos_in_chain = 0
+    for msg in chain:
+        if msg['id'] == message_id:
+            break
+        pos_in_chain += 1
+    if len(chain) > 1:
+        if pos_in_chain == 0:
+            next_msg = chain[pos_in_chain + 1]
+            keyboard.append([InlineKeyboardButton("➡", callback_data=f"message_{next_msg['folder']}_{next_msg['id']}")])
         else:
-            message_folder = query.data.split('_')[-2]
-            keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_{message_folder}_{message_id}'),
-                         InlineKeyboardButton("Назад", callback_data=f'page_{message_folder}_it')]]
-        message = ejuser.get_message(msg_id=message_id, force_folder=message_folder)
-        result = parse_message(message=message)
-        ejuser.mark_as_read(msg_id=message_id, folder=message_folder)
-        yet_more = len(message['user_to']) - RECIPIENTS_PREVIEW_COUNT
-        if yet_more > 0:
-            keyboard.append([InlineKeyboardButton("Полный список получателей",
-                                                  callback_data=f"recipients_{message_folder}_{message_id}_it")])
-        chain = ejuser.messages_chain(msg_id=message_id, folder=message_folder)
-        pos_in_chain = 0
-        for msg in chain:
-            if msg['id'] == message_id:
-                break
-            pos_in_chain += 1
-        if len(chain) > 1:
-            if pos_in_chain == 0:
+            if pos_in_chain + 1 < len(chain):
                 next_msg = chain[pos_in_chain + 1]
-                keyboard.append([InlineKeyboardButton("➡", callback_data=f"message_{next_msg['folder']}_{next_msg['id']}")])
+                prev_msg = chain[pos_in_chain - 1]
+                keyboard.append([InlineKeyboardButton("⬅",
+                                                      callback_data=f"message_{prev_msg['folder']}_{prev_msg['id']}"),
+                                 InlineKeyboardButton("➡",
+                                                      callback_data=f"message_{next_msg['folder']}_{next_msg['id']}")])
             else:
-                if pos_in_chain + 1 < len(chain):
-                    next_msg = chain[pos_in_chain + 1]
-                    prev_msg = chain[pos_in_chain - 1]
-                    keyboard.append([InlineKeyboardButton("⬅",
-                                                          callback_data=f"message_{prev_msg['folder']}_{prev_msg['id']}"),
-                                     InlineKeyboardButton("➡",
-                                                          callback_data=f"message_{next_msg['folder']}_{next_msg['id']}")])
-                else:
-                    prev_msg = chain[pos_in_chain - 1]
-                    keyboard.append(
-                        [InlineKeyboardButton("⬅", callback_data=f"message_{prev_msg['folder']}_{prev_msg['id']}")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        query.edit_message_text(result, parse_mode=ParseMode.HTML)
-        query.edit_message_reply_markup(reply_markup)
-        query.answer()
-    except:
-        print(traceback.format_exc())
+                prev_msg = chain[pos_in_chain - 1]
+                keyboard.append(
+                    [InlineKeyboardButton("⬅", callback_data=f"message_{prev_msg['folder']}_{prev_msg['id']}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text(result, parse_mode=ParseMode.HTML)
+    query.edit_message_reply_markup(reply_markup)
+    query.answer()
 
 
 def close_message(update: Update, context: CallbackContext):
@@ -299,45 +293,42 @@ def close_message(update: Update, context: CallbackContext):
 
 
 def message_recipients(update: Update, context: CallbackContext):
-    try:
-        query = update.callback_query
-        ejuser = cte.get_cte(chat_id=query.message.chat.id)
-        message_id = query.data.split('_')[-2]
-        action = query.data.split('_')[-1]
-        folder = query.data.split('_')[1]
-        if action == 'next':
-            context.user_data['recipients_offset'] += RECIPIENTS_PER_PAGE
-        elif action == 'prev':
-            context.user_data['recipients_offset'] -= RECIPIENTS_PER_PAGE
-        context.user_data['recipients_offset'] = max(0, context.user_data['recipients_offset'])
-        if 'messages_folder' not in context.user_data:
-            context.user_data['messages_folder'] = MessageFolder.INBOX
-        offset = context.user_data['recipients_offset']
-        message = ejuser.get_message(message_id, force_folder=context.user_data['messages_folder'])
-        total = math.ceil(len(message["user_to"]) / RECIPIENTS_PER_PAGE)
-        cur_page = offset // RECIPIENTS_PER_PAGE + 1
-        recipients = f'<b>Получатели (страница {cur_page}/{total})</b>\n\n<i>'
-        for user in message['user_to'][offset:offset + RECIPIENTS_PER_PAGE]:
-            recipients += f"{format_user(user)}, "
-        recipients = recipients[:-2]
-        recipients += '</i>'
-        query.edit_message_text(recipients, parse_mode=ParseMode.HTML)
+    query = update.callback_query
+    ejuser = cte.get_cte(chat_id=query.message.chat.id)
+    message_id = query.data.split('_')[-2]
+    action = query.data.split('_')[-1]
+    folder = query.data.split('_')[1]
+    if action == 'next':
+        context.user_data['recipients_offset'] += RECIPIENTS_PER_PAGE
+    elif action == 'prev':
+        context.user_data['recipients_offset'] -= RECIPIENTS_PER_PAGE
+    context.user_data['recipients_offset'] = max(0, context.user_data['recipients_offset'])
+    if 'messages_folder' not in context.user_data:
+        context.user_data['messages_folder'] = MessageFolder.INBOX
+    offset = context.user_data['recipients_offset']
+    message = ejuser.get_message(message_id, force_folder=context.user_data['messages_folder'])
+    total = math.ceil(len(message["user_to"]) / RECIPIENTS_PER_PAGE)
+    cur_page = offset // RECIPIENTS_PER_PAGE + 1
+    recipients = f'<b>Получатели (страница {cur_page}/{total})</b>\n\n<i>'
+    for user in message['user_to'][offset:offset + RECIPIENTS_PER_PAGE]:
+        recipients += f"{format_user(user)}, "
+    recipients = recipients[:-2]
+    recipients += '</i>'
+    query.edit_message_text(recipients, parse_mode=ParseMode.HTML)
+    if offset > 0:
+        keyboard = [[InlineKeyboardButton('⬅', callback_data=f'recipients_{folder}_{message_id}_prev')]]
+    else:
+        keyboard = []
+    if cur_page != total:
         if offset > 0:
-            keyboard = [[InlineKeyboardButton('⬅', callback_data=f'recipients_{folder}_{message_id}_prev')]]
+            keyboard[0].append(InlineKeyboardButton('➡', callback_data=f'recipients_{folder}_{message_id}_next'))
         else:
-            keyboard = []
-        if cur_page != total:
-            if offset > 0:
-                keyboard[0].append(InlineKeyboardButton('➡', callback_data=f'recipients_{folder}_{message_id}_next'))
-            else:
-                keyboard = [[InlineKeyboardButton('➡', callback_data=f'recipients_{folder}_{message_id}_next')]]
-        keyboard.append([InlineKeyboardButton("Назад", callback_data=f'message_{context.user_data["messages_folder"]}'
-                                                                     f'_{message_id}')])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        query.edit_message_reply_markup(reply_markup)
-        query.answer()
-    except:
-        logger.error(traceback.format_exc())
+            keyboard = [[InlineKeyboardButton('➡', callback_data=f'recipients_{folder}_{message_id}_next')]]
+    keyboard.append([InlineKeyboardButton("Назад", callback_data=f'message_{context.user_data["messages_folder"]}'
+                                                                 f'_{message_id}')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_reply_markup(reply_markup)
+    query.answer()
 
 
 def message_reply(update: Update, context: CallbackContext):
@@ -383,25 +374,22 @@ def cache_full_messages_task():
                 ejuser.cache_full_messages()
             except:
                 logger.error(f'Ошибка кэширования сообщений для {chat_id}, traceback:\n{traceback.format_exc()}')
-            logger.info(f'Работа по кэшированию сообщений для {chat_id} завершена '
+            logger.debug(f'Работа по кэшированию сообщений для {chat_id} завершена '
                         f'за {(int(time.time() - time_begin) * 1000)} ms')
         time.sleep(MESSAGES_CACHE_DELAY)
 
 
 def update_messages(update: Update, context: CallbackContext):
-    try:
-        query = update.callback_query
-        folder = query.data.split('_')[-1]
-        ejuser = cte.get_cte(chat_id=query.message.chat.id)
-        ejuser.update_read_state(folder=folder)
-        context.user_data['messages_page'] = 1
-        msgs = ejuser.get_messages(page=context.user_data['messages_page'], folder=folder)
-        messages_s, reply_markup = messages_common_part(msgs=msgs, folder=folder, context=context, ejuser=ejuser)
-        query.edit_message_text(messages_s, parse_mode=ParseMode.HTML)
-        query.edit_message_reply_markup(reply_markup=reply_markup)
-        query.answer()
-    except:
-        print(traceback.format_exc())
+    query = update.callback_query
+    folder = query.data.split('_')[-1]
+    ejuser = cte.get_cte(chat_id=query.message.chat.id)
+    ejuser.update_read_state(folder=folder)
+    context.user_data['messages_page'] = 1
+    msgs = ejuser.get_messages(page=context.user_data['messages_page'], folder=folder)
+    messages_s, reply_markup = messages_common_part(msgs=msgs, folder=folder, context=context, ejuser=ejuser)
+    query.edit_message_text(messages_s, parse_mode=ParseMode.HTML)
+    query.edit_message_reply_markup(reply_markup=reply_markup)
+    query.answer()
 
 
 if __name__ == '__main__':
