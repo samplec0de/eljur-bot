@@ -46,7 +46,7 @@ db = mongo[os.environ['database']]
 data = db['data']
 
 
-def error(update, context):
+def error(update: Update, context: CallbackContext):
     """Log Errors caused by Updates."""
     logger.warning('Update "%s" caused error "%s"', update, context.error)
 
@@ -375,7 +375,7 @@ def cache_full_messages_task():
             except:
                 logger.error(f'Ошибка кэширования сообщений для {chat_id}, traceback:\n{traceback.format_exc()}')
             logger.debug(f'Работа по кэшированию сообщений для {chat_id} завершена '
-                        f'за {(int(time.time() - time_begin) * 1000)} ms')
+                         f'за {(int(time.time() - time_begin) * 1000)} ms')
         time.sleep(MESSAGES_CACHE_DELAY)
 
 

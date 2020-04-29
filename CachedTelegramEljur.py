@@ -148,7 +148,7 @@ class CachedTelegramEljur(Eljur):
                     '$set': {
                         'login': login,
                         **self.profile(),
-                        'password': b64encode(bytes(password, encoding='utf-8'))
+                        'password': b64encode(bytes(password, encoding='utf-8'))  # TODO: реализовать переавторизацию
                     }
                 }
             )
@@ -241,7 +241,7 @@ class CachedTelegramEljur(Eljur):
         if document and 'text' in document:
             if only_cache:
                 return msg_id
-            if not no_eljur_request and document['unread']:
+            if not no_eljur_request and document['unread']:  # Прочтение сообщения на стороне eljur
                 Thread(target=super().get_message, args=[msg_id], daemon=True).start()
             return document
         if only_cache and document['unread']:
@@ -408,8 +408,8 @@ class CachedTelegramEljur(Eljur):
                 he = src_msg['user_from']
         else:
             he = src_msg['user_from']
-        chain = [
-            msg for msg in messages.find(
+        chain = []
+        for msg in messages.find(
                 {
                     'chat_id': self.chat_id,
                     'subject': {
@@ -420,9 +420,21 @@ class CachedTelegramEljur(Eljur):
                         {'users_to': [he]},
                     ]
                 }
-            )]
+        ):
+            chain.append(msg)
         chain.sort(key=lambda item: load_date(item['date']).timestamp())
         return chain[::-1]
+
+    def reply_message(self, replyto: str, text: str) -> bool:
+        """
+        Отправляет ответ на сообщение
+        :param replyto: id сообщения для ответа
+        :param text: текст сообщения
+        :return: результат отправки - успех/ошибка
+        """
+        result = super().reply_message(replyto=replyto, text=text)
+        self.download_messages_preview(check_new_only=True, folder=MessageFolder.SENT, limit=1)
+        return result
 
     def update_read_state(self, folder: str) -> None:
         """
