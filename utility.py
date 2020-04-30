@@ -62,7 +62,7 @@ def format_user(info: Dict[str, str], fmt: str = '{lastname} {firstname_short}.{
     return fmt.format(**uinfo)
 
 
-def folder_to_string(folder: str):
+def folder_to_string(folder: str) -> str:
     """
     Текстовая интерпретация типа папки сообщений
     :param folder: inbox/sent
@@ -71,7 +71,7 @@ def folder_to_string(folder: str):
     return folder.replace('inbox', 'Входящие').replace('sent', 'Отправленные')
 
 
-def opposite_folder(folder: str):
+def opposite_folder(folder: str) -> str:
     """
     Противоположная папка (для inbox - sent, для sent - inbox)
     :param folder: папка, для которой нужно определить противоположную
@@ -80,3 +80,12 @@ def opposite_folder(folder: str):
     if folder == MessageFolder.INBOX:
         return MessageFolder.SENT
     return MessageFolder.INBOX
+
+
+def parse_vendor(url: str) -> str:
+    """
+    vendor школы по ссылке на электронный журнал
+    :param url: ссылка на элжур школы (*.eljur.ru)
+    return vendor школы
+    """
+    return url.replace('https://', '').replace('http://', '').split('.')[0]

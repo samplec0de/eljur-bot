@@ -6,12 +6,12 @@ import time
 import traceback
 from pathlib import Path
 from threading import Thread
-from typing import Dict, Any
+from typing import Dict, Any, Callable
 
 import pymongo
 from pymorphy2 import MorphAnalyzer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode, ReplyKeyboardRemove, ReplyKeyboardMarkup, \
-    Update
+    Update, ChatAction
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, PicklePersistence, \
     ConversationHandler, MessageHandler, Filters, CallbackContext
 
@@ -20,10 +20,11 @@ from CachedTelegramEljur import CachedTelegramEljur
 from constants import *
 from homework import homework_handler, homework
 from messages import present_messages
-from utility import format_user, opposite_folder, folder_to_string
+from utility import format_user, opposite_folder, folder_to_string, parse_vendor
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 data_dir = Path(__file__).parent / 'data'
+media = Path(__file__).parent / 'media'
 if not data_dir.exists():
     os.mkdir(data_dir)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -40,10 +41,12 @@ logger.addHandler(ch)
 logger.setLevel(logging.INFO)
 logger_cte.addHandler(ch)
 morph = MorphAnalyzer()
-LOGIN, WAIT_LOGIN, WAIT_PASSWORD, MAIN_MENU = range(4)
+LOGIN, WAIT_LOGIN, WAIT_PASSWORD, MAIN_MENU, CHOOSE_VENDOR, INPUT_VENDOR = range(6)
 mongo = pymongo.MongoClient(os.environ.get('mongo_uri'))
 db = mongo[os.environ['database']]
 data = db['data']
+messages = db['messages']
+cache_queue = db['cache_queue']
 
 
 def error(update: Update, context: CallbackContext):
@@ -57,10 +60,10 @@ def start(update: Update, context: CallbackContext):
     :param update: передается библиотекой телеграма
     :type context: передается библиотекой телеграма
     """
-    keyboard = [['Войти в элжур']]
+    keyboard = [['Физтех-Лицей'], ['Другая школа']]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     update.message.reply_text('Здравствуйте! Подключитесь к элжуру:', reply_markup=reply_markup)
-    return LOGIN
+    return CHOOSE_VENDOR
 
 
 def send_menu(update: Update, context: CallbackContext):
@@ -72,6 +75,37 @@ def send_menu(update: Update, context: CallbackContext):
     keyboard = [['Сообщения', 'Домашнее задание']]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     update.message.reply_text('Меню', reply_markup=reply_markup)
+
+
+def vendor_handler(update: Update, context: CallbackContext):
+    """
+    Определение вендора
+    :param update: передается библиотекой телеграма
+    :type context: передается библиотекой телеграма
+    """
+    if update.message.text == 'Физтех-Лицей':
+        context.user_data['vendor'] = 'eljur'
+        return login_handler(update, context)
+    else:
+        context.dispatcher.bot.send_chat_action(chat_id=update.message.chat.id, action=ChatAction.RECORD_VIDEO)
+        context.dispatcher.bot.send_video(update.message.chat.id,
+                                          open(media / 'copy-vendor.mov', 'rb'),
+                                          width=2960,
+                                          height=416)
+        update.message.reply_text(text='Скопируйте ссылку на ваш элжур, как показано выше и отправьте её мне:',
+                                  reply_markup=ReplyKeyboardRemove())
+        return INPUT_VENDOR
+
+
+def user_send_vendor(update: Update, context: CallbackContext):
+    """
+    Вввод ссылки на электронный журнал или vendor
+    :param update: передается библиотекой телеграма
+    :type context: передается библиотекой телеграма
+    """
+    vendor = parse_vendor(update.message.text)
+    context.user_data['vendor'] = vendor
+    return login_handler(update, context)
 
 
 def login_handler(update: Update, context: CallbackContext):
@@ -97,7 +131,9 @@ def user_send_login(update: Update, context: CallbackContext):
 
 def user_send_password(update: Update, context: CallbackContext):
     ejuser = CachedTelegramEljur(chat_id=update.message.chat.id, no_messages=True)
-    if ejuser.auth(login=context.user_data['eljur_login'], password=update.message.text):
+    if ejuser.auth(login=context.user_data['eljur_login'],
+                   password=update.message.text,
+                   vendor=context.user_data['vendor']):
         update.message.reply_text('Вы успешно вошли в элжур! Выполняю синхронизацию, пожалуйста, подождите.')
         cte.get_cte(chat_id=update.message.chat.id)  # Кэшируем сообщения
         if update.message.chat.id not in authorized_chat_ids:
@@ -111,21 +147,27 @@ def user_send_password(update: Update, context: CallbackContext):
     else:
         keyboard = [['Попробовать ещё раз']]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        update.message.reply_text(f'Неправильный логин/пароль', reply_markup=reply_markup)
+        update.message.reply_text(f'Неправильный логин/пароль. '
+                                  f'Если вы указали "Другая школа", '
+                                  f'убедитесь в правильности отправленной ссылки на журнал.', reply_markup=reply_markup)
         return ConversationHandler.END
 
 
-def cancel(update: Update, context: CallbackContext):
+def stop(update: Update, context: CallbackContext):
     user = update.message.from_user
-    logger.info("User %s canceled the conversation.", user.first_name)
-    update.message.reply_text('Bye! I hope we can talk again some day.',
+    logger.info("%s остановил бота", user.first_name)
+    messages.delete_many({'chat_id': update.message.chat.id})
+    cache_queue.delete_many({'chat_id': update.message.chat.id})
+    data.delete_one({'chat_id': update.message.chat.id})
+    update.message.reply_text('Бот остановлен, ваши данные удалены из бота. Для запуска напишите /start',
                               reply_markup=ReplyKeyboardRemove())
-
     return ConversationHandler.END
 
 
 def check_for_new_messages(context):
     user_id = context.job.context
+    if not data.find_one({'chat_id': user_id}):
+        return
     logger.info(f'Проверка новых сообщений для {user_id}')
     ejuser = cte.get_cte(chat_id=user_id)
     new_messages = ejuser.download_messages_preview(check_new_only=True, limit=100, folder=MessageFolder.INBOX)
@@ -178,7 +220,7 @@ def messages_common_part(msgs: Dict[str, Any],
     return messages_s, reply_markup
 
 
-def messages(update: Update, context: CallbackContext):
+def messages_handler(update: Update, context: CallbackContext):
     ejuser = cte.get_cte(chat_id=update.message.chat.id)
     msgs = ejuser.get_messages()
     context.user_data['messages_page'] = 1
@@ -392,6 +434,13 @@ def update_messages(update: Update, context: CallbackContext):
     query.answer()
 
 
+def build_fallback(text: str) -> Callable:
+    def fallback_func(update: Update, context: CallbackContext):
+        update.message.reply_text(text)
+
+    return fallback_func
+
+
 if __name__ == '__main__':
     persistence = PicklePersistence(filename=str(data_dir / 'persistence.pickle'))
     updater = Updater(os.environ["token"], use_context=True, persistence=persistence)
@@ -414,14 +463,18 @@ if __name__ == '__main__':
         entry_points=[CommandHandler('start', start),
                       MessageHandler(Filters.regex('Попробовать ещё раз'), login_handler)],
         states={
-            LOGIN: [MessageHandler(Filters.regex('Войти в элжур'), login_handler)],
-            WAIT_LOGIN: [MessageHandler(Filters.text, user_send_login)],
-            WAIT_PASSWORD: [MessageHandler(Filters.text, user_send_password)],
+            CHOOSE_VENDOR: [MessageHandler(Filters.regex('(Физтех-Лицей|Другая школа)'), vendor_handler),
+                            MessageHandler(Filters.text, build_fallback('Выберите школу'))],
+            INPUT_VENDOR: [CommandHandler('stop', stop), MessageHandler(Filters.text, user_send_vendor)],
+            # LOGIN: [MessageHandler(Filters.regex('Войти в элжур'), login_handler)],
+            WAIT_LOGIN: [CommandHandler('stop', stop), MessageHandler(Filters.text, user_send_login)],
+            WAIT_PASSWORD: [CommandHandler('stop', stop), MessageHandler(Filters.text, user_send_password)],
             MAIN_MENU: [MessageHandler(Filters.regex('Домашнее задание'), homework),
-                        MessageHandler(Filters.regex('Сообщения'), messages),
+                        MessageHandler(Filters.regex('Сообщения'), messages_handler),
+                        CommandHandler('stop', stop),
                         MessageHandler(Filters.text, just_message)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
+        fallbacks=[CommandHandler('stop', stop)],
         name="bot_conversation",
         persistent=True,
         per_message=False
