@@ -17,7 +17,7 @@ from constants import *
 from eljur import Eljur
 from utility import load_date, hash_string
 
-mongo = pymongo.MongoClient(f"mongodb://root:efGel-343ed3-e33e@194.147.78.78:27017/admin")
+mongo = pymongo.MongoClient(os.environ.get('mongo_uri'))
 db = mongo[os.environ['database']]
 messages = db['messages']
 cache_queue = db['cache_queue']

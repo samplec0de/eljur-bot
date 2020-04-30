@@ -41,7 +41,7 @@ logger.setLevel(logging.INFO)
 logger_cte.addHandler(ch)
 morph = MorphAnalyzer()
 LOGIN, WAIT_LOGIN, WAIT_PASSWORD, MAIN_MENU = range(4)
-mongo = pymongo.MongoClient(f"mongodb://root:efGel-343ed3-e33e@194.147.78.78:27017/admin")
+mongo = pymongo.MongoClient(os.environ.get('mongo_uri'))
 db = mongo[os.environ['database']]
 data = db['data']
 
