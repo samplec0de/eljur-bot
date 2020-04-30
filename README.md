@@ -6,6 +6,12 @@
 Бот запущен в Telegram: [@eljurobot](https://tglink.ru/eljurobot)<br/>
 Видео с демонстрацией работы [Youtube](https://youtu.be/XmASlRzKDDc)
 
+Фичи:
+- Просмотр списка сообщений
+- Отправка ответа на сообщения
+- Просмотр актуального домашнего задания
+- Дает доступ к сообщениям даже когда eljur.ru не отвечает
+
 
 ![Элжуробот](https://raw.githubusercontent.com/samplec0de/eljur-bot/master/media/messages-homework.jpg)
 
