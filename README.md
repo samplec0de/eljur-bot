@@ -3,7 +3,8 @@
 Мобильное приложение eljur.ru медленное и зависит от работы сайта, который иногда работает нестабильно. 
 Бот кэширует информацию с элжура и делает её доступной из Telegram в любой момент.
 
-Бот запущен в Telegram: [@eljurobot](https://tglink.ru/eljurobot)
+Бот запущен в Telegram: [@eljurobot](https://tglink.ru/eljurobot)<br/>
+[Видео с демонстрацией работы](https://youtu.be/XmASlRzKDDc)
 
 Разрабатывается и спонсируется [АНОО "Физтех-Лицей" им. П.Л. Капицы](https://anoo.ftl.name)
 
