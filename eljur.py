@@ -9,16 +9,19 @@ from constants import MessageFolder
 
 
 class Eljur:
-    def __init__(self, token: str = None):
+    def __init__(self, token: str = None, vendor: str = 'eljur'):
         self.token = token  # Токен пользователя, полученный после авторизации (выдаётся на 3 месяца)
         self.api = 'https://api.eljur.ru/api'  # Адрес API eljur.ru
         self._rdata = {
             'auth_token': self.token,
-            'vendor': 'eljur',  # Домен школы, на данный момент эксклюзивно Физтех-Лицей
+            'vendor': vendor,  # Домен школы
             'out_format': 'json',  # Формат, в котором API eljur.ru будет возвращать данные (есть ещё xml)
             'devkey': '9235e26e80ac2c509c48fe62db23642c',  # Ключ разработчика,
             # запасной: 19c4bfc2705023fe080ce94ace26aec9
         }
+
+    def set_vendor(self, vendor: str) -> None:
+        self._rdata['vendor'] = vendor
 
     def _parse_schedule_like(self, api_path: str) -> Optional[Dict[str, dict]]:
         """

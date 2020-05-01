@@ -18,6 +18,14 @@ class CTEStorage:
             self.ctes[chat_id] = CachedTelegramEljur(chat_id=chat_id)
         return self.ctes[chat_id]
 
+    def purge_ejuser(self, chat_id: int) -> None:
+        """
+        Удаляет пользователя из хранилища
+        :param chat_id: идентификатор чата
+        """
+        ejuser = self.ctes.pop(chat_id, None)
+        del ejuser
+
     @property
     def cached_chats(self):
         """

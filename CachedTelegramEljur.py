@@ -41,7 +41,10 @@ class CachedTelegramEljur(Eljur):
         super().__init__()
         self.chat_id = chat_id
         self.token = self.auth_token
-        super().__init__(self.token)
+        if self.vendor:
+            super().__init__(self.token, self.vendor)
+        else:
+            super().__init__(self.token)
         self.msg_cache = {MessageFolder.INBOX: [], MessageFolder.SENT: []}
         self.msgs_load_limit = MESSAGES_PER_USER_ML
         self.not_cached = []
@@ -74,6 +77,13 @@ class CachedTelegramEljur(Eljur):
         document = data.find_one({'chat_id': self.chat_id})
         if document and field in document:
             return document[field]
+        return None
+
+    @property
+    def vendor(self):
+        res = data.find_one({'chat_id': self.chat_id})
+        if res and 'vendor' in res:
+            return res['vendor']
         return None
 
     @property
@@ -136,6 +146,7 @@ class CachedTelegramEljur(Eljur):
             'devkey': '9235e26e80ac2c509c48fe62db23642c',  # 19c4bfc2705023fe080ce94ace26aec9
             'out_format': 'json'
         })
+        super().set_vendor(vendor)
         if r.status_code == 200:
             tdata = loads(r.text)['response']['result']
             self.auth_token = tdata['token']
@@ -244,7 +255,7 @@ class CachedTelegramEljur(Eljur):
             if not no_eljur_request and document['unread']:  # Прочтение сообщения на стороне eljur
                 Thread(target=super().get_message, args=[msg_id], daemon=True).start()
             return document
-        if only_cache and document['unread']:
+        if only_cache and document and document['unread']:
             logger.debug(f'{msg_id} не будет сохраняться сейчас, потому что оно ещё не прочтено')
             return msg_id
         if no_eljur_request:

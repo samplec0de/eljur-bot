@@ -1,5 +1,5 @@
-pymorphy2~=0.8
+pymorphy2
 PyYAML
 python-telegram-bot
-requests~=2.22.0
-pymongo~=3.10.1
+requests
+pymongo
