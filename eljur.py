@@ -138,8 +138,39 @@ class Eljur:
             return False
         return True
 
-    def profile(self):
+    def profile(self) -> Optional[dict]:
+        """
+        Основная информация о пользователе
+        """
         request = get(f'{self.api}/getrules', params=self._rdata)
         if request.status_code != 200:
             return None
         return loads(request.text)['response']['result']
+
+    def periods(self, show_disabled: bool = True) -> Optional[List[Dict[str, Optional[str]]]]:
+        """
+        Учебные периоды пользователя
+        :param show_disabled: возвращать ли ещё не наступившие периоды
+        """
+        request = get(f'{self.api}/getperiods', params={**self._rdata, 'show_disabled': show_disabled})
+        if request.status_code != 200:
+            return None
+        return loads(request.text)['response']['result']['students'][0]['periods']
+
+    def marks(self, last_period: bool = True) -> Optional[Dict[str, Any]]:
+        period = None
+        if last_period:
+            periods = self.periods(show_disabled=False)
+            if periods:
+                period = f"{periods[-1]['start']}-{periods[-1]['end']}"
+        request = get(f'{self.api}/getmarks', params={**self._rdata, 'days': period})
+        if request.status_code != 200:
+            return None
+        return list(loads(request.text)['response']['result']['students'].values())[0]
+
+
+if __name__ == '__main__':
+    ejuser = Eljur(token='e7cb299ba71374d2d5720f4a11b4d3f27c750f4aa439ca33ee0eb___9190')
+    mks = ejuser.marks()
+
+    pass

@@ -72,7 +72,7 @@ def send_menu(update: Update, context: CallbackContext):
     :param update: передается библиотекой телеграма
     :type context: передается библиотекой телеграма
     """
-    keyboard = [['Сообщения', 'Домашнее задание']]
+    keyboard = [['Домашнее задание', 'Оценки'], ['Сообщения']]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     update.message.reply_text('Меню', reply_markup=reply_markup)
 
@@ -227,6 +227,26 @@ def messages_handler(update: Update, context: CallbackContext):
     folder = MessageFolder.INBOX
     messages_s, reply_markup = messages_common_part(msgs=msgs, folder=folder, context=context, ejuser=ejuser)
     update.message.reply_text(messages_s, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+
+def marks_handler(update: Update, context: CallbackContext):
+    ejuser = cte.get_cte(chat_id=update.message.chat.id)
+    marks = ejuser.marks(last_period=True)
+    if marks:
+        marks_s = f"Оценки за <b>{ejuser.periods(show_disabled=False)[-1]['fullname']}</b>\n\n"
+        for lesson in marks['lessons']:
+            marks_s += "<pre>"
+            marks_s += lesson['name']
+            if lesson['average'] == 0:
+                marks_s += " (нет оценок)</pre>\n"
+            else:
+                marks_s += f" (ср. {lesson['average']}): </pre>"
+                marks_s += ', '.join([mark['value'] for mark in lesson['marks']])
+                marks_s += "\n\n"
+        update.message.reply_text(marks_s, parse_mode=ParseMode.HTML)
+    else:
+        update.message.reply_text("Не удалось подключиться к элжуру",
+                                  parse_mode=ParseMode.HTML)
 
 
 def messages_page_handler(update: Update, context: CallbackContext):
@@ -471,6 +491,7 @@ if __name__ == '__main__':
             WAIT_PASSWORD: [CommandHandler('stop', stop), MessageHandler(Filters.text, user_send_password)],
             MAIN_MENU: [MessageHandler(Filters.regex('Домашнее задание'), homework),
                         MessageHandler(Filters.regex('Сообщения'), messages_handler),
+                        MessageHandler(Filters.regex('Оценки'), marks_handler),
                         CommandHandler('stop', stop),
                         MessageHandler(Filters.text, just_message)],
         },
