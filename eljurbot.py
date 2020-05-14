@@ -181,8 +181,9 @@ def check_for_new_messages(context):
         unread = '🆕 ' if message['unread'] else ''
         text += f"<b>{unread}{files}<i>{format_user(message['user_from'])}</i></b>" \
                 f"<pre>    {subject}</pre>\n"
-        keyboard = [[InlineKeyboardButton("Посмотреть сообщение",
-                                          callback_data=f'message_view_new_{message["id"]}')]]
+        keyboard = [[InlineKeyboardButton("Посмотреть",
+                                          callback_data=f'message_view_new_{message["id"]}')],
+                    [InlineKeyboardButton("Закрыть", callback_data='close')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         context.bot.send_message(chat_id=user_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
@@ -415,13 +416,15 @@ def just_message(update: Update, context: CallbackContext):
         message_id = context.user_data['reply']
         context.user_data['reply'] = None
         reply_text = update.message.text
+        keyboard = [[InlineKeyboardButton("Закрыть", callback_data='close')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         if ejuser.reply_message(replyto=message_id, text=reply_text):
             message = ejuser.get_message(message_id)
             result = parse_message(message=message)
             result += f'\n\n<b>Ваш ответ на это сообщение был был отправлен:</b> \n<pre>{reply_text}</pre>'
-            update.message.reply_text(result, parse_mode=ParseMode.HTML)
+            update.message.reply_text(result, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
         else:
-            update.message.reply_text('Произошла ошибка, попробуйте позднее')
+            update.message.reply_text('Произошла ошибка, попробуйте позднее', reply_markup=reply_markup)
     else:
         send_menu(update=update, context=context)
 
