@@ -361,7 +361,10 @@ class CachedTelegramEljur(Eljur):
         """
         Проверяет существует ли в базе сообщение с id msg_id в папке folder
         """
-        return msg_id in self.message_ids(folder=folder)
+        res = messages.find_one({'hash': hash_string(f'{self.chat_id}_{folder}_{msg_id}')})
+        if res:
+            return True
+        return False
 
     def download_messages_preview(self, check_new_only: bool, folder: str, limit: int = 1000) -> List[dict]:
         """
@@ -381,7 +384,7 @@ class CachedTelegramEljur(Eljur):
                                       'folder': msg_type,
                                       'hash': hash_string(f'{self.chat_id}_{msg_type}_{msg["id"]}'), **msg}
                                      for msg in msgs['messages']
-                                     if not self.message_exist(folder=folder, msg_id=msg['id'])])
+                                     if not self.message_exist(folder=msg_type, msg_id=msg['id'])])
         self.msg_cache[folder] = new_messages + self.msg_cache[folder]
         not_cached = []
         if not check_new_only:
@@ -394,9 +397,9 @@ class CachedTelegramEljur(Eljur):
                     cache_queue.insert_many(deepcopy(not_cached))
                 self.not_cached.extend(not_cached)
                 messages.insert_many(new_messages)
-                self.add_message_ids(folder=folder, ids=[msg['id'] for msg in new_messages])
+                # self.add_message_ids(folder=folder, ids=[msg['id'] for msg in new_messages])
             except BulkWriteError as bwe:
-                logger.error(f'BulkWriteError:\n{bwe.details}')
+                logger.error(f'[0] BulkWriteError:\n{bwe.details}')
         self.download_in_progress = False
         return [msg for msg in new_messages if msg['folder'] == MessageFolder.INBOX]
 

@@ -182,8 +182,8 @@ def check_for_new_messages(context):
         text += f"<b>{unread}{files}<i>{format_user(message['user_from'])}</i></b>" \
                 f"<pre>    {subject}</pre>\n"
         keyboard = [[InlineKeyboardButton("Посмотреть",
-                                          callback_data=f'message_view_new_{message["id"]}')],
-                    [InlineKeyboardButton("Закрыть", callback_data='close')]]
+                                          callback_data=f'message_view_new_{message["id"]}'),
+                     InlineKeyboardButton("Закрыть", callback_data='close')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         context.bot.send_message(chat_id=user_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
