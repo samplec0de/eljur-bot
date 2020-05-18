@@ -11,9 +11,9 @@ from typing import Dict, Any, Callable
 import pymongo
 from pymorphy2 import MorphAnalyzer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode, ReplyKeyboardRemove, ReplyKeyboardMarkup, \
-    Update, ChatAction
+    Update, ChatAction, User
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, PicklePersistence, \
-    ConversationHandler, MessageHandler, Filters, CallbackContext
+    ConversationHandler, MessageHandler, Filters, CallbackContext, JobQueue, Job
 
 from CTEStorage import cte
 from CachedTelegramEljur import CachedTelegramEljur
@@ -141,7 +141,8 @@ def user_send_password(update: Update, context: CallbackContext):
         updater.job_queue.run_repeating(check_for_new_messages,
                                         interval=MESSAGES_CHECK_DELAY,
                                         first=MESSAGES_CHECK_DELAY,
-                                        context=update.message.chat.id)
+                                        context=update.message.chat.id,
+                                        name=f'new_messages:{update.message.chat.id}')
         send_menu(update=update, context=context)
         return MAIN_MENU
     else:
@@ -154,14 +155,17 @@ def user_send_password(update: Update, context: CallbackContext):
 
 
 def stop(update: Update, context: CallbackContext):
-    user = update.message.from_user
-    logger.info("%s остановил бота", user.first_name)
+    user: User = update.message.from_user
+    logger.info(f"{user.first_name} {user.username} остановил бота")
+    chat_id = user.id
+    job_new_messages: Job = job_queue.get_jobs_by_name(f'new_messages:{chat_id}')[0]
+    job_new_messages.schedule_removal()
     messages.delete_many({'chat_id': update.message.chat.id})
     cache_queue.delete_many({'chat_id': update.message.chat.id})
     data.delete_one({'chat_id': update.message.chat.id})
     update.message.reply_text('Бот остановлен, ваши данные удалены из бота. Для запуска напишите /start',
                               reply_markup=ReplyKeyboardRemove())
-    cte.purge_ejuser(user)
+    cte.purge_ejuser(chat_id)
     return ConversationHandler.END
 
 
@@ -467,7 +471,7 @@ def build_fallback(text: str) -> Callable:
 
 if __name__ == '__main__':
     persistence = PicklePersistence(filename=str(data_dir / 'persistence.pickle'))
-    updater = Updater(os.environ["token"], use_context=True, persistence=persistence)
+    updater: Updater = Updater(os.environ["token"], use_context=True, persistence=persistence)
 
     callback_queries = [
         {'callback': login_handler, 'pattern': '^login$'},
@@ -507,12 +511,14 @@ if __name__ == '__main__':
 
     updater.dispatcher.add_handler(conv_handler)
     authorized_chat_ids = [user['chat_id'] for user in data.find({})]
+    job_queue: JobQueue = updater.job_queue
 
     for uid in authorized_chat_ids:
-        updater.job_queue.run_repeating(check_for_new_messages,
-                                        interval=MESSAGES_CHECK_DELAY,
-                                        first=MESSAGES_CHECK_DELAY,
-                                        context=uid)
+        job_queue.run_repeating(check_for_new_messages,
+                                interval=MESSAGES_CHECK_DELAY,
+                                first=MESSAGES_CHECK_DELAY,
+                                context=uid,
+                                name=f'new_messages:{uid}')
 
     Thread(target=cache_full_messages_task, daemon=True, name='Cache-Full').start()
 
