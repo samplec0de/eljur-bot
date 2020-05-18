@@ -1,6 +1,5 @@
 from copy import deepcopy
 from json import loads
-from pprint import pprint
 from typing import Dict, Optional, Any, List, Union
 
 from requests import get
@@ -19,9 +18,6 @@ class Eljur:
             'devkey': '9235e26e80ac2c509c48fe62db23642c',  # Ключ разработчика,
             # запасной: 19c4bfc2705023fe080ce94ace26aec9
         }
-
-    def set_vendor(self, vendor: str) -> None:
-        self._rdata['vendor'] = vendor
 
     def _parse_schedule_like(self, api_path: str) -> Optional[Dict[str, dict]]:
         """

@@ -161,6 +161,7 @@ def stop(update: Update, context: CallbackContext):
     data.delete_one({'chat_id': update.message.chat.id})
     update.message.reply_text('Бот остановлен, ваши данные удалены из бота. Для запуска напишите /start',
                               reply_markup=ReplyKeyboardRemove())
+    cte.purge_ejuser(user)
     return ConversationHandler.END
 
 

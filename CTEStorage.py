@@ -23,8 +23,7 @@ class CTEStorage:
         Удаляет пользователя из хранилища
         :param chat_id: идентификатор чата
         """
-        ejuser = self.ctes.pop(chat_id, None)
-        del ejuser
+        self.ctes.pop(chat_id, None)
 
     @property
     def cached_chats(self):

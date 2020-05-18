@@ -146,7 +146,6 @@ class CachedTelegramEljur(Eljur):
             'devkey': '9235e26e80ac2c509c48fe62db23642c',  # 19c4bfc2705023fe080ce94ace26aec9
             'out_format': 'json'
         })
-        super().set_vendor(vendor)
         if r.status_code == 200:
             tdata = loads(r.text)['response']['result']
             self.auth_token = tdata['token']
@@ -158,8 +157,9 @@ class CachedTelegramEljur(Eljur):
                 {
                     '$set': {
                         'login': login,
-                        **self.profile(),
-                        'password': b64encode(bytes(password, encoding='utf-8'))  # TODO: реализовать переавторизацию
+                        **Eljur(token=tdata['token'], vendor=vendor).profile(),
+                        'password': b64encode(bytes(password, encoding='utf-8'))
+                        # TODO: реализовать переавторизацию
                     }
                 }
             )
