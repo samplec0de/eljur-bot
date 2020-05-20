@@ -77,7 +77,7 @@ def opposite_folder(folder: str) -> str:
     :param folder: папка, для которой нужно определить противоположную
     :return: inbox/sent
     """
-    if folder == MessageFolder.INBOX:
+    if folder == MessageFolder.INBOX or folder == "unread":
         return MessageFolder.SENT
     return MessageFolder.INBOX
 

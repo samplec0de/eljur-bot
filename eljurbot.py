@@ -196,7 +196,7 @@ def check_for_new_messages(context):
 def messages_common_part(msgs: Dict[str, Any],
                          folder: str,
                          context: CallbackContext,
-                         ejuser: CachedTelegramEljur):
+                         ejuser: CachedTelegramEljur, unread_only: bool = False):
     total = math.ceil(int(msgs['total']) / 6)
     messages_s = present_messages(chat_id=ejuser.chat_id, msgs=msgs, folder=folder)
     op_folder = opposite_folder(folder=folder)
@@ -208,6 +208,8 @@ def messages_common_part(msgs: Dict[str, Any],
         unread = ejuser.unread_count()
         if unread > 0:
             messages_s += f'\nНовых сообщений: {unread}\n'
+    else:
+        unread = 0
     if context.user_data['messages_page'] == 1:
         keyboard = [[InlineKeyboardButton(f'{op_folder_name.lower().capitalize()}',
                                           callback_data=f'page_{op_folder}_1'),
@@ -218,10 +220,14 @@ def messages_common_part(msgs: Dict[str, Any],
         keyboard = [[InlineKeyboardButton('⬅', callback_data=f'page_{folder}_prev'),
                      InlineKeyboardButton('В начало', callback_data=f'page_{folder}_1'),
                      InlineKeyboardButton('➡', callback_data=f'page_{folder}_next')]]
+    if unread > 0 and not unread_only:
+        keyboard[0].insert(1, InlineKeyboardButton('🆕', callback_data=f'page_unread_1'))
+    elif unread_only:
+        keyboard[0].insert(1, InlineKeyboardButton('👁️+🆕', callback_data=f'page_inbox_1'))
     for i in range(0, msgs['count'], 3):
         keyboard.append([InlineKeyboardButton(str(label),
                                               callback_data=f'message_{folder}_{msgs["messages"][label - 1]["id"]}')
-                         for label in range(i + 1, i + 4)])
+                         for label in range(i + 1, i + 4) if label - 1 < len(msgs["messages"])])
     reply_markup = InlineKeyboardMarkup(keyboard)
     return messages_s, reply_markup
 
@@ -268,14 +274,23 @@ def messages_page_handler(update: Update, context: CallbackContext):
     else:
         context.user_data['messages_page'] = 1
     folder = query.data.split('_')[1]
+    if folder == "unread":
+        unread_only = True
+        folder = MessageFolder.INBOX
+    else:
+        unread_only = False
     context.user_data['messages_page'] = max(1, context.user_data['messages_page'])
     ejuser = cte.get_cte(chat_id=query.message.chat.id)
-    msgs = ejuser.get_messages(page=context.user_data['messages_page'], folder=folder)
+    msgs = ejuser.get_messages(page=context.user_data['messages_page'], folder=folder, unreadonly=unread_only)
     total = math.ceil(int(msgs['total']) / 6)
     if context.user_data['messages_page'] > total:
         context.user_data['messages_page'] = 1
         msgs = ejuser.get_messages(page=context.user_data['messages_page'])
-    messages_s, reply_markup = messages_common_part(msgs=msgs, folder=folder, context=context, ejuser=ejuser)
+    messages_s, reply_markup = messages_common_part(msgs=msgs,
+                                                    folder=folder,
+                                                    context=context,
+                                                    ejuser=ejuser,
+                                                    unread_only=unread_only)
     query.edit_message_text(messages_s, parse_mode=ParseMode.HTML)
     query.edit_message_reply_markup(reply_markup=reply_markup)
     query.answer()
@@ -442,7 +457,7 @@ def cache_full_messages_task():
             try:
                 ejuser = cte.get_cte(chat_id=chat_id)
                 ejuser.cache_full_messages()
-            except:
+            except Exception:
                 logger.error(f'Ошибка кэширования сообщений для {chat_id}, traceback:\n{traceback.format_exc()}')
             logger.debug(f'Работа по кэшированию сообщений для {chat_id} завершена '
                          f'за {(int(time.time() - time_begin) * 1000)} ms')
@@ -476,7 +491,7 @@ if __name__ == '__main__':
     callback_queries = [
         {'callback': login_handler, 'pattern': '^login$'},
         {'callback': homework_handler, 'pattern': '^homework_[0-9.]*$'},
-        {'callback': messages_page_handler, 'pattern': '^(page_inbox_|page_sent_)(prev|next|it|[0-9]*)*$'},
+        {'callback': messages_page_handler, 'pattern': '^(page_inbox_|page_sent_|page_unread_)(prev|next|it|[0-9]*)*$'},
         {'callback': view_message, 'pattern': '^(message_inbox_|message_sent_|message_view_new_)[0-9]*$'},
         {'callback': message_reply, 'pattern': '^(reply_inbox_|reply_sent_)[0-9]*$'},
         {'callback': update_messages, 'pattern': '^(update_inbox|update_sent)$'},
