@@ -11,7 +11,7 @@ from typing import Dict, Any, Callable
 import pymongo
 from pymorphy2 import MorphAnalyzer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode, ReplyKeyboardRemove, ReplyKeyboardMarkup, \
-    Update, ChatAction, User
+    Update, ChatAction, User, CallbackQuery
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, PicklePersistence, \
     ConversationHandler, MessageHandler, Filters, CallbackContext, JobQueue, Job
 
@@ -415,13 +415,14 @@ def message_recipients(update: Update, context: CallbackContext):
 
 
 def message_reply(update: Update, context: CallbackContext):
-    query = update.callback_query
+    query: CallbackQuery = update.callback_query
     message_id = query.data.split('_')[-1]
     folder = query.data.split('_')[-2]
     ejuser = cte.get_cte(chat_id=query.message.chat.id)
     message = ejuser.get_message(message_id)
     result = parse_message(message=message)
     result += '\n\nНапишите ответное сообщение:'
+    context.user_data['write_answer_message_id'] = query.message.message_id
     query.edit_message_text(result, parse_mode=ParseMode.HTML)
     context.user_data['reply'] = message_id
     keyboard = [[InlineKeyboardButton('Отмена', callback_data=f'message_{folder}_{message_id}')]]
@@ -436,13 +437,17 @@ def just_message(update: Update, context: CallbackContext):
         message_id = context.user_data['reply']
         context.user_data['reply'] = None
         reply_text = update.message.text
-        keyboard = [[InlineKeyboardButton("Закрыть", callback_data='close')]]
+        keyboard = [[InlineKeyboardButton("Закрыть", callback_data='close'),
+                     InlineKeyboardButton("Сообщения", callback_data='page_inbox_it')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         if ejuser.reply_message(replyto=message_id, text=reply_text):
             message = ejuser.get_message(message_id)
             result = parse_message(message=message)
             result += f'\n\n<b>Ваш ответ на это сообщение был был отправлен:</b> \n<pre>{reply_text}</pre>'
-            update.message.reply_text(result, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+            context.bot.edit_message_text(result, message_id=context.user_data['write_answer_message_id'],
+                                          chat_id=update.message.from_user.id,
+                                          parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+            context.bot.delete_message(chat_id=update.message.chat.id, message_id=update.message.message_id)
         else:
             update.message.reply_text('Произошла ошибка, попробуйте позднее', reply_markup=reply_markup)
     else:
