@@ -20,8 +20,7 @@ from CachedTelegramEljur import CachedTelegramEljur
 from constants import *
 from homework import homework_handler, homework
 from messages import present_messages
-from utility import format_user, opposite_folder, folder_to_string, parse_vendor, load_date, clean_html, \
-    format_message_text
+from utility import format_user, opposite_folder, folder_to_string, parse_vendor, load_date, clean_html
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 data_dir = Path(__file__).parent / 'data'
@@ -339,7 +338,8 @@ def view_message(update: Update, context: CallbackContext):
                      InlineKeyboardButton("Назад", callback_data=f'page_{message_folder}_it')]]
     message = ejuser.get_message(msg_id=message_id, force_folder=message_folder)
     result = parse_message(message=message)
-    ejuser.mark_as_read(msg_id=message_id, folder=message_folder)
+    if message_folder == MessageFolder.INBOX:
+        ejuser.mark_as_read(msg_id=message_id, folder=message_folder)
     yet_more = len(message['user_to']) - RECIPIENTS_PREVIEW_COUNT
     if yet_more > 0:
         keyboard.append([InlineKeyboardButton("Полный список получателей",
