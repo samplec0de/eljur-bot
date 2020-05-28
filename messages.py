@@ -33,6 +33,8 @@ def present_messages(chat_id: int, msgs: Dict[str, Any], folder: str) -> str:
                 else:
                     msg['user_to'] = msg['users_to']
             user_preview = format_user(msg['user_to'][0])
+            if 'users_to' in msg and len(msg['users_to']) > 1:
+                user_preview += f" и ещё {len(msg['users_to']) - 1}"
         files = ' 📎 ' if msg['with_files'] else ''
         chain = cte.get_cte(chat_id=chat_id).messages_chain(msg_id=msg['id'], folder=folder)
         chain_pos = 0
