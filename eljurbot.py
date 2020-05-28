@@ -367,7 +367,7 @@ def view_message(update: Update, context: CallbackContext):
                 keyboard.append(
                     [InlineKeyboardButton("⬅", callback_data=f"message_{prev_msg['folder']}_{prev_msg['id']}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    query.edit_message_text(result, parse_mode=ParseMode.HTML)
+    query.edit_message_text(result, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     query.edit_message_reply_markup(reply_markup)
     query.answer()
 
