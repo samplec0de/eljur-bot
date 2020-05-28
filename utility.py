@@ -2,7 +2,7 @@ import hashlib
 import re
 from copy import deepcopy
 from datetime import datetime
-from typing import Dict
+from typing import Dict, List
 
 from constants import MessageFolder
 
@@ -89,3 +89,27 @@ def parse_vendor(url: str) -> str:
     return vendor школы
     """
     return url.replace('https://', '').replace('http://', '').split('.')[0]
+
+
+def links(text: str) -> List[str]:
+    """
+    Получает все ссылки из текста
+    :param text: текст
+    :return: массив ссылок
+    """
+    res = []
+    for link in re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text):
+        if link != 'http' and link != 'https':
+            res.append(link.strip(',. '))
+    return res
+
+
+def format_message_text(text: str) -> str:
+    """
+    Подгатавливает текст сообщения к отправке
+    :param text: текст
+    :return: сообщение для отправки пользователю
+    """
+    for link in links(text):
+        text = text.replace(link, f'<a href="{link}">{link}</a>')
+    return text

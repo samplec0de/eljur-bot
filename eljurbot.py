@@ -20,7 +20,8 @@ from CachedTelegramEljur import CachedTelegramEljur
 from constants import *
 from homework import homework_handler, homework
 from messages import present_messages
-from utility import format_user, opposite_folder, folder_to_string, parse_vendor
+from utility import format_user, opposite_folder, folder_to_string, parse_vendor, load_date, clean_html, \
+    format_message_text
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 data_dir = Path(__file__).parent / 'data'
@@ -184,8 +185,9 @@ def check_for_new_messages(context):
         subject = message['subject']
         files = '📎 ' if message['with_files'] else ''
         unread = '🆕 ' if message['unread'] else ''
-        text += f"<b>{unread}{files}<i>{format_user(message['user_from'])}</i></b>" \
-                f"<pre>    {subject}</pre>\n"
+        text += f"<b>{unread}{files}{format_user(message['user_from'])}</b>\n" \
+                f"<i>Тема:</i> {subject}\n\n" \
+                f"<pre>{clean_html(message['short_text'])}</pre>"
         keyboard = [[InlineKeyboardButton("Посмотреть",
                                           callback_data=f'message_view_new_{message["id"]}'),
                      InlineKeyboardButton("Закрыть", callback_data='close')]]
@@ -313,9 +315,10 @@ def parse_message(message: dict):
             files += f'<a href="{file["link"]}">📎 {file["filename"]}</a>\n'
     result = f"<i>Тема:</i> <b>{message['subject']}</b>\n" \
              f"<i>Отправитель:</i> {format_user(message['user_from'])}\n" \
+             f"<i>Отправлено:</i> {load_date(message['date']).strftime('%-d %B %H:%M')}\n" \
              f"<i>{'Получатели' if len(message['user_to']) > 1 else 'Получатель'}:</i> {recipients}{and_yet_more}\n\n" \
-             f"<i>Сообщение:\n</i>" \
-             f"<pre>{message['text']}</pre>\n" \
+             f"<i>Сообщение:</i>\n" \
+             f"{message['text']}\n" \
              f"{files}"
     return result
 
@@ -443,7 +446,7 @@ def just_message(update: Update, context: CallbackContext):
         if ejuser.reply_message(replyto=message_id, text=reply_text):
             message = ejuser.get_message(message_id)
             result = parse_message(message=message)
-            result += f'\n\n<b>Ваш ответ на это сообщение был был отправлен:</b> \n<pre>{reply_text}</pre>'
+            result += f'\n\n<b>Ваш ответ на это сообщение был был отправлен:</b> \n{reply_text}'
             context.bot.edit_message_text(result, message_id=context.user_data['write_answer_message_id'],
                                           chat_id=update.message.from_user.id,
                                           parse_mode=ParseMode.HTML, reply_markup=reply_markup)
