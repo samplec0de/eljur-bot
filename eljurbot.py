@@ -428,7 +428,10 @@ def message_reply(update: Update, context: CallbackContext):
     context.user_data['write_answer_message_id'] = query.message.message_id
     query.edit_message_text(result, parse_mode=ParseMode.HTML)
     context.user_data['reply'] = message_id
+    context.user_data['reply_all'] = '_all_' in query.data
     keyboard = [[InlineKeyboardButton('Отмена', callback_data=f'message_{folder}_{message_id}')]]
+    # if 'users_to' in message and len(message['users_to']) > 1:
+    #     keyboard[0].insert(0, InlineKeyboardButton('[0] Ответ всем', callback_data=query.data.replace('reply_', 'reply_all_')))
     reply_markup = InlineKeyboardMarkup(keyboard)
     query.edit_message_reply_markup(reply_markup)
     query.answer()
@@ -501,7 +504,7 @@ if __name__ == '__main__':
         {'callback': homework_handler, 'pattern': '^homework_[0-9.]*$'},
         {'callback': messages_page_handler, 'pattern': '^(page_inbox_|page_sent_|page_unread_)(prev|next|it|[0-9]*)*$'},
         {'callback': view_message, 'pattern': '^(message_inbox_|message_sent_|message_view_new_)[0-9]*$'},
-        {'callback': message_reply, 'pattern': '^(reply_inbox_|reply_sent_)[0-9]*$'},
+        {'callback': message_reply, 'pattern': '^(reply_inbox_|reply_sent_|reply_all_inbox_|reply_all_sent_)[0-9]*$'},
         {'callback': update_messages, 'pattern': '^(update_inbox|update_sent)$'},
         {'callback': message_recipients, 'pattern': '^(recipients_inbox_|recipients_sent_)[0-9]*_(prev|next|it)$'},
         {'callback': close_message, 'pattern': '^close$'}
