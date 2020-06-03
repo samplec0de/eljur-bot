@@ -225,6 +225,9 @@ def messages_common_part(msgs: Dict[str, Any],
         keyboard[0].insert(1, InlineKeyboardButton('🆕', callback_data=f'page_unread_1'))
     elif unread_only:
         keyboard[0].insert(1, InlineKeyboardButton('👁️+🆕', callback_data=f'page_inbox_1'))
+    starred = ejuser.starred_messages
+    if len(starred) > 0:
+        keyboard[0].insert(1, InlineKeyboardButton('⭐', callback_data=f'starred_1'))
     for i in range(0, msgs['count'], 3):
         keyboard.append([InlineKeyboardButton(str(label),
                                               callback_data=f'message_{folder}_{msgs["messages"][label - 1]["id"]}')
@@ -325,17 +328,27 @@ def parse_message(message: dict):
 def view_message(update: Update, context: CallbackContext):
     query = update.callback_query
     ejuser = cte.get_cte(chat_id=query.message.chat.id)
+    from_starred = query.data.endswith('_starred')
+    starred_page = 1
+    if from_starred:
+        starred_page = query.data.split('_')[-2]
+        query.data = '_'.join(query.data.split('_')[:-2])
     context.user_data['recipients_offset'] = 0
     context.user_data['reply'] = None
     message_id = query.data.split('_')[-1]
     if query.data.startswith('message_view_new_'):
+        message_folder = 'inbox'
         keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_inbox_{message_id}'),
                      InlineKeyboardButton("Закрыть", callback_data='close')]]
-        message_folder = 'inbox'
     else:
         message_folder = query.data.split('_')[-2]
+        back_callback = f"page_{message_folder}_it" if not from_starred else f"starred_{starred_page}"
         keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_{message_folder}_{message_id}'),
-                     InlineKeyboardButton("Назад", callback_data=f'page_{message_folder}_it')]]
+                     InlineKeyboardButton("Назад", callback_data=back_callback)]]
+    starred = ejuser.is_starred(msg_id=message_id, folder=message_folder)
+    star = "Убрать из избранного" if starred else "Добавить в избранное"
+    start_callback = f"unstar_{message_folder}_{message_id}" if starred else f"star_{message_folder}_{message_id}"
+    keyboard[0].insert(1, InlineKeyboardButton(f"{star}", callback_data=f'{start_callback}'))
     message = ejuser.get_message(msg_id=message_id, force_folder=message_folder)
     result = parse_message(message=message)
     if message_folder == MessageFolder.INBOX:
@@ -495,6 +508,50 @@ def build_fallback(text: str) -> Callable:
     return fallback_func
 
 
+def star_handler(update: Update, context: CallbackContext):
+    query: CallbackQuery = update.callback_query
+    message_id = query.data.split('_')[-1]
+    folder = query.data.split('_')[-2]
+    ejuser = cte.get_cte(chat_id=query.message.chat.id)
+    starred = ejuser.is_starred(msg_id=message_id, folder=folder)
+    if starred:
+        ejuser.unstar_message(msg_id=message_id, folder=folder)
+        query.answer(text='Убрано из избранных')
+    else:
+        ejuser.star_message(msg_id=message_id, folder=folder)
+        query.answer(text='Добавлено в избранные')
+    view_message(update, context)
+
+
+def starred_messages(update: Update, context: CallbackContext):
+    query: CallbackQuery = update.callback_query
+    ejuser = cte.get_cte(chat_id=query.message.chat.id)
+    starred = ejuser.starred_messages
+    total = math.ceil(len(starred) / 6)
+    page = int(query.data.split('_')[-1])
+    messages_s = f"Избранное {len(starred)} сообщений" \
+                 f"- страница <b>{context.user_data['messages_page']}/{total}</b>\n"
+    messages_s += present_messages(chat_id=ejuser.chat_id, msgs={"messages": starred[(page - 1) * 6:page * 6]},
+                                   folder='both')
+    messages_s = messages_s[:-1]
+    if page == 1:
+        keyboard = [[]]
+    else:
+        keyboard = [[InlineKeyboardButton('⬅', callback_data=f'starred_{page - 1}')]]
+    if len(starred) - page * 6 > 0:
+        keyboard[0].insert(1, InlineKeyboardButton('➡', callback_data=f'starred_{page + 1}'))
+    keyboard[0].insert(1, InlineKeyboardButton('Назад', callback_data=f'page_inbox_it'))
+    for i in range(0, 6, 3):
+        keyboard.append([InlineKeyboardButton(str(label),
+                                              callback_data=f'message_{starred[label - 1]["folder"]}_'
+                                                            f'{starred[label - 1]["id"]}_{page}_starred')
+                         for label in range(i + 1, i + 4) if label - 1 < len(starred)])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.answer(text='Избранные сообщения')
+    query.edit_message_text(text=messages_s, parse_mode=ParseMode.HTML)
+    query.edit_message_reply_markup(reply_markup=reply_markup)
+
+
 if __name__ == '__main__':
     persistence = PicklePersistence(filename=str(data_dir / 'persistence.pickle'))
     updater: Updater = Updater(os.environ["token"], use_context=True, persistence=persistence)
@@ -503,11 +560,13 @@ if __name__ == '__main__':
         {'callback': login_handler, 'pattern': '^login$'},
         {'callback': homework_handler, 'pattern': '^homework_[0-9.]*$'},
         {'callback': messages_page_handler, 'pattern': '^(page_inbox_|page_sent_|page_unread_)(prev|next|it|[0-9]*)*$'},
-        {'callback': view_message, 'pattern': '^(message_inbox_|message_sent_|message_view_new_)[0-9]*$'},
+        {'callback': view_message, 'pattern': '^(message_inbox_|message_sent_|message_view_new_)[0-9]*(|_[0-9]*_starred{1})$'},
         {'callback': message_reply, 'pattern': '^(reply_inbox_|reply_sent_|reply_all_inbox_|reply_all_sent_)[0-9]*$'},
         {'callback': update_messages, 'pattern': '^(update_inbox|update_sent)$'},
         {'callback': message_recipients, 'pattern': '^(recipients_inbox_|recipients_sent_)[0-9]*_(prev|next|it)$'},
-        {'callback': close_message, 'pattern': '^close$'}
+        {'callback': close_message, 'pattern': '^close$'},
+        {'callback': star_handler, 'pattern': '^(star_inbox_|star_sent_|unstar_inbox_|unstar_sent_)[0-9]*$'},
+        {'callback': starred_messages, 'pattern': '^starred_[0-9]*$'},
     ]
     for param in callback_queries:
         updater.dispatcher.add_handler(CallbackQueryHandler(**param))

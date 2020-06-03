@@ -18,13 +18,16 @@ def present_messages(chat_id: int, msgs: Dict[str, Any], folder: str) -> str:
     today = datetime.now()
     yesterday = today - timedelta(days=1)
     for ind, msg in enumerate(msgs['messages']):
+        l_folder = folder
+        if l_folder == 'both':
+            l_folder = msg['folder']
         date = load_date(msg['date'])
         when = f"{date.strftime('%-d %B %H:%M')}"
         if days_equal(date, today):
             when = f"сегодня в {date.strftime('%H:%M')}"
         if days_equal(date, yesterday):
             when = f"вчера в {date.strftime('%H:%M')}"
-        if folder == MessageFolder.INBOX:
+        if l_folder == MessageFolder.INBOX:
             user_preview = format_user(msg['user_from'])
         else:
             if 'user_to' not in msg:
@@ -36,13 +39,13 @@ def present_messages(chat_id: int, msgs: Dict[str, Any], folder: str) -> str:
             if 'users_to' in msg and len(msg['users_to']) > 1:
                 user_preview += f" и ещё {len(msg['users_to']) - 1}"
         files = ' 📎 ' if msg['with_files'] else ''
-        chain = cte.get_cte(chat_id=chat_id).messages_chain(msg_id=msg['id'], folder=folder)
+        chain = cte.get_cte(chat_id=chat_id).messages_chain(msg_id=msg['id'], folder=l_folder)
         chain_pos = 0
         for chain_msg in chain:
             if chain_msg['id'] == msg['id']:
                 break
             chain_pos += 1
-        if chain_pos != 0 and chain[chain_pos - 1]['folder'] == MessageFolder.SENT and folder == MessageFolder.INBOX:
+        if chain_pos != 0 and chain[chain_pos - 1]['folder'] == MessageFolder.SENT and l_folder == MessageFolder.INBOX:
             answered = ' ↪️️ '
         else:
             answered = ''

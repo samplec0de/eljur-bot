@@ -492,3 +492,22 @@ class CachedTelegramEljur(Eljur):
                 hw[key.replace('-', '.')] = hw[key]
                 hw.pop(key, None)
             return hw
+
+    @property
+    def starred_messages(self):
+        starred = []
+        for message in messages.find({'chat_id': self.chat_id, 'starred': True}):
+            starred.append(message)
+        return starred
+
+    def star_message(self, msg_id: str, folder: str):
+        messages.find_one_and_update({'chat_id': self.chat_id, 'folder': folder, 'id': msg_id},
+                                     {'$set': {'starred': True}})
+
+    def unstar_message(self, msg_id: str, folder: str):
+        messages.find_one_and_update({'chat_id': self.chat_id, 'folder': folder, 'id': msg_id},
+                                     {'$set': {'starred': False}})
+
+    def is_starred(self, msg_id: str, folder: str):
+        result = messages.find_one({'chat_id': self.chat_id, 'id': msg_id, 'folder': folder, 'starred': True})
+        return bool(result)
