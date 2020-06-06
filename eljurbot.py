@@ -346,7 +346,7 @@ def view_message(update: Update, context: CallbackContext):
         keyboard = [[InlineKeyboardButton("Ответить", callback_data=f'reply_{message_folder}_{message_id}'),
                      InlineKeyboardButton("Назад", callback_data=back_callback)]]
     starred = ejuser.is_starred(msg_id=message_id, folder=message_folder)
-    star = "Убрать из избранного" if starred else "Добавить в избранное"
+    star = "👎🏿⭐️️" if starred else "⭐️"
     start_callback = f"unstar_{message_folder}_{message_id}" if starred else f"star_{message_folder}_{message_id}"
     keyboard[0].insert(1, InlineKeyboardButton(f"{star}", callback_data=f'{start_callback}'))
     message = ejuser.get_message(msg_id=message_id, force_folder=message_folder)
