@@ -493,10 +493,9 @@ class CachedTelegramEljur(Eljur):
                 hw.pop(key, None)
             return hw
 
-    @property
-    def starred_messages(self):
+    def starred_messages(self, folder):
         starred = []
-        for message in messages.find({'chat_id': self.chat_id, 'starred': True}):
+        for message in messages.find({'chat_id': self.chat_id, 'folder': folder, 'starred': True}):
             starred.append(message)
         return starred
 
