@@ -4,11 +4,13 @@ import math
 import os
 import time
 import traceback
+import socket
 from pathlib import Path
 from threading import Thread
 from typing import Dict, Any, Callable
 
 import pymongo
+import requests
 from pymorphy2 import MorphAnalyzer
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode, ReplyKeyboardRemove, ReplyKeyboardMarkup, \
     Update, ChatAction, User, CallbackQuery
@@ -174,24 +176,29 @@ def check_for_new_messages(context):
     if not data.find_one({'chat_id': user_id}):
         return
     logger.info(f'Проверка новых сообщений для {user_id}')
-    ejuser = cte.get_cte(chat_id=user_id)
-    new_messages = ejuser.download_messages_preview(check_new_only=True, limit=100, folder=MessageFolder.INBOX)
-    logger.info(f'{len(new_messages)} новых сообщений для {user_id}')
-    if not new_messages:
-        return
-    for message in new_messages:
-        text = "<b>Новое сообщение</b>\n\n"
-        subject = message['subject']
-        files = '📎 ' if message['with_files'] else ''
-        unread = '🆕 ' if message['unread'] else ''
-        text += f"<b>{unread}{files}{format_user(message['user_from'])}</b>\n" \
-                f"<i>Тема:</i> {subject}\n\n" \
-                f"<pre>{clean_html(message['short_text'])}</pre>"
-        keyboard = [[InlineKeyboardButton("Посмотреть",
-                                          callback_data=f'message_view_new_{message["id"]}'),
-                     InlineKeyboardButton("Закрыть", callback_data='close')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        context.bot.send_message(chat_id=user_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+    try:
+        ejuser = cte.get_cte(chat_id=user_id)
+        new_messages = ejuser.download_messages_preview(check_new_only=True, limit=100, folder=MessageFolder.INBOX)
+        logger.info(f'{len(new_messages)} новых сообщений для {user_id}')
+        if not new_messages:
+            return
+        for message in new_messages:
+            text = "<b>Новое сообщение</b>\n\n"
+            subject = message['subject']
+            files = '📎 ' if message['with_files'] else ''
+            unread = '🆕 ' if message['unread'] else ''
+            text += f"<b>{unread}{files}{format_user(message['user_from'])}</b>\n" \
+                    f"<i>Тема:</i> {subject}\n\n" \
+                    f"<pre>{clean_html(message['short_text'])}</pre>"
+            keyboard = [[InlineKeyboardButton("Посмотреть",
+                                              callback_data=f'message_view_new_{message["id"]}'),
+                         InlineKeyboardButton("Закрыть", callback_data='close')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            context.bot.send_message(chat_id=user_id, text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+    except socket.gaierror as e:
+        pass
+    except requests.exceptions.ConnectionError as e:
+        pass
 
 
 def messages_common_part(msgs: Dict[str, Any],
